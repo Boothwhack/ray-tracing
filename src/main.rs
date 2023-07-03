@@ -21,7 +21,7 @@ use picture::{Color, Picture, RGBA8};
 use crate::camera::{Camera, Viewport};
 use crate::gpu::{Frame, Gpu, Renderer};
 use crate::ray::Ray;
-use crate::render::render_frame_async;
+use crate::render::{MULTISAMPLE_8X_PATTERN, render_frame_async};
 
 mod gpu;
 mod ray;
@@ -84,7 +84,7 @@ fn spawn_worker(frame: &Arc<Mutex<Frame<RGBA8>>>, state: Arc<Mutex<State>>) -> J
 
                 info!(target: "app", "Starting frame render...");
                 let start = Instant::now();
-                render_frame_async(frame.as_ref(), &state.camera, &state.world, 100);
+                render_frame_async(frame.as_ref(), &state.camera, &state.world, &MULTISAMPLE_8X_PATTERN);
                 let elapsed = start.elapsed();
                 info!(target: "app", "Finished rendering. Took {:?}", elapsed);
             }
