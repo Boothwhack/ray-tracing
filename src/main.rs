@@ -1,27 +1,25 @@
 //! Simple ray-tracing rendering engine, following the
 //! [Ray Tracing in One Weekend](https://raytracing.github.io/) book series.
 
-use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle, spawn};
 use std::time::Instant;
 
 use log::info;
 use nalgebra::{point, Point3};
-use rand::random;
-use rayon::prelude::*;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, MouseScrollDelta, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::window::WindowBuilder;
 
 use object::{Object, Sphere};
-use picture::{Color, Picture, RGBA8};
+use picture::{Color, RGBA8};
 
-use crate::camera::{Camera, Viewport};
+use crate::camera::Camera;
 use crate::gpu::{Frame, Gpu, Renderer};
-use crate::ray::Ray;
-use crate::render::{MULTISAMPLE_8X_PATTERN, render_frame_async};
+use crate::material::Material;
+
+use crate::render::{MULTISAMPLE_4X_PATTERN, MULTISAMPLE_8X_PATTERN, render_frame_async};
 
 mod gpu;
 mod ray;
@@ -29,38 +27,7 @@ mod camera;
 mod object;
 mod render;
 mod picture;
-
-const BACKGROUND_COLOR: RGBA8 = RGBA8::new_hex(0x2C2056FF);
-
-fn render_picture(mut picture: Picture<&mut [RGBA8]>, samples: u32, viewport: &Viewport, obj: &Object) {
-    let width = picture.width();
-    let height = picture.height();
-    for (x, y) in (0..width * height).map(|i| (i % width, i / width)) {
-        let acc: Color = (0..samples)
-            .map(|_| {
-                let u = (x as f32 + random::<f32>()) / (picture.width() - 1) as f32;
-                let v = (y as f32 + random::<f32>()) / (picture.height() - 1) as f32;
-                let ray = Ray::new(
-                    viewport.origin,
-                    (viewport.lower_left_corner + u * viewport.horizontal + v * viewport.vertical).coords,
-                );
-                render::render_ray(&ray, obj)
-            }).sum();
-
-        let samples = samples as f32;
-        let color = Color::new(acc.r / samples, acc.g / samples, acc.b / samples, 1.0);
-        *picture.pixel_mut(x, y) = color.into();
-    }
-}
-
-fn render_frame(camera: &Camera, frame: &mut Frame<RGBA8>, obj: &Object) {
-    let viewport = camera.viewport(frame.width(), frame.height());
-    info!(target: "app", "Starting frame render...");
-    let start = Instant::now();
-    render_picture(frame.picture_mut(), 100, &viewport, obj);
-    let elapsed = start.elapsed();
-    info!(target: "app", "Finished rendering. Took {:?}", elapsed);
-}
+mod material;
 
 const LOOK_SENSITIVITY: f32 = 0.005;
 
@@ -84,7 +51,7 @@ fn spawn_worker(frame: &Arc<Mutex<Frame<RGBA8>>>, state: Arc<Mutex<State>>) -> J
 
                 info!(target: "app", "Starting frame render...");
                 let start = Instant::now();
-                render_frame_async(frame.as_ref(), &state.camera, &state.world, &MULTISAMPLE_8X_PATTERN);
+                render_frame_async(frame.as_ref(), &state.camera, &state.world, &MULTISAMPLE_4X_PATTERN);
                 let elapsed = start.elapsed();
                 info!(target: "app", "Finished rendering. Took {:?}", elapsed);
             }
@@ -117,8 +84,26 @@ fn main() {
     let state = Arc::new(Mutex::new(State {
         camera: Camera::new(Point3::origin(), 1.0),
         world: Object::List(vec![
-            Object::Sphere(Sphere::new(point![0.0, 0.0, -1.0], 0.5)),
-            Object::Sphere(Sphere::new(point![0.0, -100.5, -1.0], 100.0)),
+            Object::Sphere(Sphere::new(
+                point![0.0, 0.0, -1.5],
+                0.5,
+                Material::lambert(RGBA8::new_hex(0x996D51FF).into()),
+            )),
+            Object::Sphere(Sphere::new(
+                point![-1.0, 0.0, -1.0],
+                0.5,
+                Material::metal(RGBA8::new_hex(0xC5B673FF).into()),
+            )),
+            Object::Sphere(Sphere::new(
+                point![1.0, 0.0, -1.0],
+                0.5,
+                Material::metal(Color::WHITE),
+            )),
+            Object::Sphere(Sphere::new(
+                point![0.0, -100.5, -1.0],
+                100.0,
+                Material::lambert(RGBA8::new_hex(0xBDC94DFF).into()),
+            )),
         ]),
     }));
 

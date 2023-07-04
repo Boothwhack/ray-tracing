@@ -5,6 +5,7 @@ use bytemuck_derive::{AnyBitPattern, NoUninit};
 use nalgebra::Vector3;
 use wgpu::TextureFormat;
 
+#[derive(Copy, Clone, Debug)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -24,6 +25,7 @@ impl Sum for Color {
 
 impl Color {
     pub const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+    pub const BLACK: Color = Color::new(0.0, 0.0, 0.0, 1.0);
 
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self { r, g, b, a }
@@ -65,6 +67,14 @@ impl Mul<f32> for Color {
     }
 }
 
+impl Mul<Color> for Color {
+    type Output = Color;
+
+    fn mul(self, rhs: Color) -> Self::Output {
+        Color::new(self.r * rhs.r, self.g * rhs.g, self.b * rhs.b, self.a * rhs.a)
+    }
+}
+
 impl Mul<Color> for f32 {
     type Output = Color;
 
@@ -85,6 +95,17 @@ pub struct RGBA8 {
 impl From<Color> for RGBA8 {
     fn from(value: Color) -> Self {
         RGBA8::new_norm(value.r, value.g, value.b, value.a)
+    }
+}
+
+impl From<RGBA8> for Color {
+    fn from(value: RGBA8) -> Self {
+        Color::new(
+            value.r as f32 / 255.0,
+            value.g as f32 / 255.0,
+            value.b as f32 / 255.0,
+            value.a as f32 / 255.0,
+        )
     }
 }
 
@@ -158,12 +179,12 @@ impl<'a, T> Picture<&'a mut [T]> {
         &mut self.pixels[index]
     }
 
-    pub fn slice_mut(&mut self, x: u32, y: u32, len: usize) -> &mut[T] {
+    pub fn slice_mut(&mut self, x: u32, y: u32, len: usize) -> &mut [T] {
         let from = (y * self.width() + x) as usize;
         &mut self.pixels[from..from + len]
     }
 
-    pub fn buffer_mut(&mut self) -> &mut[T] {
+    pub fn buffer_mut(&mut self) -> &mut [T] {
         self.pixels
     }
 }

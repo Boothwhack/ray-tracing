@@ -137,7 +137,7 @@ struct Screen {
     bind_group: BindGroup,
 }
 
-const RENDER_SCALE: u32 = 10;
+const RENDER_SCALE: u32 = 1;
 
 impl Screen {
     pub fn new(gpu: &Gpu, surface: &Surface, size: (u32, u32)) -> Self {

@@ -2,6 +2,7 @@ use std::ops::RangeBounds;
 
 use float_ord::FloatOrd;
 use nalgebra::Point3;
+use crate::material::Material;
 
 use crate::ray::{Face, Hit, Ray};
 
@@ -9,11 +10,12 @@ use crate::ray::{Face, Hit, Ray};
 pub struct Sphere {
     pub center: Point3<f32>,
     pub radius: f32,
+    pub material: Material,
 }
 
 impl Sphere {
-    pub fn new(center: Point3<f32>, radius: f32) -> Self {
-        Sphere { center, radius }
+    pub fn new(center: Point3<f32>, radius: f32, material: Material) -> Self {
+        Sphere { center, radius, material }
     }
 
     pub fn hit<R>(&self, ray: &Ray, t_rng: R) -> Option<Hit>
@@ -50,6 +52,7 @@ impl Sphere {
             normal,
             t: root,
             face,
+            material: &self.material,
         })
     }
 }

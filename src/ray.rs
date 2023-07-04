@@ -1,4 +1,5 @@
 use nalgebra::{Point3, Vector3};
+use crate::material::Material;
 
 pub struct Ray {
     pub origin: Point3<f32>,
@@ -20,9 +21,10 @@ pub enum Face {
     Back,
 }
 
-pub struct Hit {
+pub struct Hit<'a> {
     pub point: Point3<f32>,
     pub normal: Vector3<f32>,
     pub face: Face,
     pub t: f32,
+    pub material: &'a Material,
 }

@@ -1,8 +1,8 @@
-use std::iter::once;
+use std::iter::{once, repeat_with};
 use std::sync::Mutex;
 
 use log::trace;
-use nalgebra::{vector, Vector2};
+use nalgebra::{vector, Vector2, Vector3};
 use rayon::prelude::*;
 
 use crate::camera::{Camera, Viewport};
@@ -23,7 +23,7 @@ impl<const N: usize> SamplePattern for [Vector2<f32>; N] {
 
 // patterns based on DirectX (https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_standard_multisample_quality_levels)
 // 1/16=0.0625
-pub const SINGLE_SAMPLE_PATTERN: [Vector2<f32>;1] = [vector![0.5, 0.5]];
+pub const SINGLE_SAMPLE_PATTERN: [Vector2<f32>; 1] = [vector![0.5, 0.5]];
 pub const MULTISAMPLE_2X_PATTERN: [Vector2<f32>; 2] = [
     vector![0.25, 0.75],
     vector![0.75, 0.25],
@@ -45,15 +45,40 @@ pub const MULTISAMPLE_8X_PATTERN: [Vector2<f32>; 8] = [
     vector![0.9375, 0.9375],
 ];
 
-pub fn render_ray(ray: &Ray, object: &Object) -> Color {
-    if let Some(Hit { normal, .. }) = object.hit(ray, 0.0..) {
-        return Color::visualize_normal(&normal);
+pub fn random() -> f32 {
+    fastrand::f32()
+}
+
+pub fn random_vec() -> Vector3<f32> {
+    vector![random() * 2.0 - 1.0, random() * 2.0 - 1.0, random() * 2.0 - 1.0]
+}
+
+pub fn random_vec_in_unit_sphere() -> Vector3<f32> {
+    repeat_with(random_vec)
+        .find(|vec| vec.magnitude_squared() < 1.0)
+        .expect("infinite iterator")
+}
+
+pub fn random_unit_vec() -> Vector3<f32> {
+    random_vec_in_unit_sphere().normalize()
+}
+
+pub fn render_ray(ray: &Ray, object: &Object, bounces_left: u32) -> Color {
+    if bounces_left <= 0 {
+        return Color::BLACK;
+    }
+
+    if let Some(hit) = object.hit(ray, 0.001..) {
+        let (attenuation, scattered) = hit.material.scatter(ray, &hit);
+        return attenuation * render_ray(&scattered, object, bounces_left - 1);
     }
 
     let unit_direction = ray.direction.normalize();
     let t = 0.5 * (unit_direction.y + 1.0);
     (1.0 - t) * Color::WHITE + t * Color::new(0.5, 0.6, 1.0, 1.0)
 }
+
+const MAX_BOUNCES: u32 = 50;
 
 /// Produces the color of a single pixel using n randomly placed samples.
 pub fn render_pixel(x: u32, y: u32, viewport: &Viewport, object: &Object, samples: &impl SamplePattern) -> Color {
@@ -67,10 +92,15 @@ pub fn render_pixel(x: u32, y: u32, viewport: &Viewport, object: &Object, sample
                 (viewport.lower_left_corner + u * viewport.horizontal + v * viewport.vertical).coords,
             )
         })
-        .map(|ray| render_ray(&ray, object))
+        .map(|ray| render_ray(&ray, object, MAX_BOUNCES))
         .sum();
     let samples = samples.len() as f32;
-    Color::new(sum.r / samples, sum.g / samples, sum.b / samples, 1.0)
+    Color::new(
+        (sum.r / samples).sqrt(),
+        (sum.g / samples).sqrt(),
+        (sum.b / samples).sqrt(),
+        1.0,
+    )
 }
 
 fn render_work_pixels<I, P>(work: Work<I>, viewport: &Viewport, object: &Object, samples: &impl SamplePattern) -> Vec<P>
@@ -88,6 +118,8 @@ struct Work<I> {
     iter: I,
 }
 
+const LINES_PER_WORK: u32 = 10;
+
 pub fn render_frame_async<P: PixelFormat + Copy + Send>(frame: &Mutex<Frame<P>>, camera: &Camera, object: &Object, samples: &impl SamplePattern) {
     let (width, height) = {
         let frame = frame.lock().expect("frame lock");
@@ -96,7 +128,7 @@ pub fn render_frame_async<P: PixelFormat + Copy + Send>(frame: &Mutex<Frame<P>>,
     let pixels = width * height;
     let viewport = camera.viewport(width, height);
 
-    let chunk_len = width * 3;
+    let chunk_len = width * LINES_PER_WORK;
     let chunks = pixels / chunk_len;
     let remainder = pixels % chunk_len;
 
