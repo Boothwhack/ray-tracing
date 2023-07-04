@@ -118,7 +118,7 @@ struct Work<I> {
     iter: I,
 }
 
-const LINES_PER_WORK: u32 = 10;
+const LINES_PER_WORK: u32 = 50;
 
 pub fn render_frame_async<P: PixelFormat + Copy + Send>(frame: &Mutex<Frame<P>>, camera: &Camera, object: &Object, samples: &impl SamplePattern) {
     let (width, height) = {

@@ -92,12 +92,12 @@ fn main() {
             Object::Sphere(Sphere::new(
                 point![-1.0, 0.0, -1.0],
                 0.5,
-                Material::metal(RGBA8::new_hex(0xC5B673FF).into()),
+                Material::metal(RGBA8::new_hex(0xC5B673FF).into(), 0.05),
             )),
             Object::Sphere(Sphere::new(
                 point![1.0, 0.0, -1.0],
                 0.5,
-                Material::metal(Color::WHITE),
+                Material::dielectric(1.5),
             )),
             Object::Sphere(Sphere::new(
                 point![0.0, -100.5, -1.0],
