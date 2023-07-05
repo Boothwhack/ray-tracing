@@ -2,7 +2,7 @@ use std::iter::{once, repeat_with};
 use std::sync::Mutex;
 
 use log::trace;
-use nalgebra::{vector, Vector2, Vector3};
+use nalgebra::{point, Point2, vector, Vector2, Vector3};
 use rayon::prelude::*;
 
 use crate::camera::{Camera, Viewport};
@@ -63,6 +63,12 @@ pub fn random_unit_vec() -> Vector3<f32> {
     random_vec_in_unit_sphere().normalize()
 }
 
+pub fn random_vec_in_unit_disk() -> Vector3<f32> {
+    repeat_with(|| vector![random() * 2.0 - 1.0, random() * 2.0 - 1.0, 0.0])
+        .find(|vec| vec.magnitude_squared() < 1.0)
+        .expect("infinite iterator")
+}
+
 pub fn render_ray(ray: &Ray, object: &Object, bounces_left: u32) -> Color {
     if bounces_left <= 0 {
         return Color::BLACK;
@@ -81,16 +87,13 @@ pub fn render_ray(ray: &Ray, object: &Object, bounces_left: u32) -> Color {
 const MAX_BOUNCES: u32 = 50;
 
 /// Produces the color of a single pixel using n randomly placed samples.
-pub fn render_pixel(x: u32, y: u32, viewport: &Viewport, object: &Object, samples: &impl SamplePattern) -> Color {
+pub fn render_pixel(p: Point2<u32>, viewport: &Viewport, object: &Object, samples: &impl SamplePattern) -> Color {
     let samples = samples.sample_offsets();
     let sum: Color = samples.iter()
         .map(|offset| {
-            let u = (x as f32 + offset.x) / (viewport.image_width - 1.0);
-            let v = (y as f32 + offset.y) / (viewport.image_height - 1.0);
-            Ray::new(
-                viewport.origin,
-                (viewport.lower_left_corner + u * viewport.horizontal + v * viewport.vertical).coords,
-            )
+            let u = (p.x as f32 + offset.x) / (viewport.image_width - 1.0);
+            let v = (p.y as f32 + offset.y) / (viewport.image_height - 1.0);
+            viewport.emit_ray(&point![u,v])
         })
         .map(|ray| render_ray(&ray, object, MAX_BOUNCES))
         .sum();
@@ -108,7 +111,7 @@ fn render_work_pixels<I, P>(work: Work<I>, viewport: &Viewport, object: &Object,
           P: PixelFormat {
     let mut buffer = Vec::with_capacity(work.iter.size_hint().0);
     let pixels = work.iter
-        .map(|(x, y)| render_pixel(x, y, viewport, object, samples))
+        .map(|(x, y)| render_pixel(point![x, y], viewport, object, samples))
         .map(P::from);
     buffer.extend(pixels);
     buffer
