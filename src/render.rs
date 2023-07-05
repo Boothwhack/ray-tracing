@@ -1,4 +1,5 @@
 use std::iter::{once, repeat_with};
+use std::ops::{Range};
 use std::sync::Mutex;
 
 use log::trace;
@@ -47,6 +48,10 @@ pub const MULTISAMPLE_8X_PATTERN: [Vector2<f32>; 8] = [
 
 pub fn random() -> f32 {
     fastrand::f32()
+}
+
+pub fn random_in(range: Range<f32>) -> f32 {
+    random() * (range.end - range.start) + range.start
 }
 
 pub fn random_vec() -> Vector3<f32> {

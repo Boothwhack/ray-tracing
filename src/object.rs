@@ -64,6 +64,10 @@ pub enum Object {
 }
 
 impl Object {
+    pub fn sphere(center: Point3<f32>, radius: f32, material: Material) -> Self {
+        Object::Sphere(Sphere::new(center, radius, material))
+    }
+
     pub fn hit<R>(&self, ray: &Ray, t_rng: R) -> Option<Hit>
         where R: RangeBounds<f32> + Clone {
         match self {

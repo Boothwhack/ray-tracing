@@ -1,6 +1,7 @@
 //! Simple ray-tracing rendering engine, following the
 //! [Ray Tracing in One Weekend](https://raytracing.github.io/) book series.
 
+use std::iter::once;
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle, spawn};
 use std::time::Instant;
@@ -18,8 +19,9 @@ use picture::RGBA8;
 use crate::camera::{Camera, CameraDirection};
 use crate::gpu::{Frame, Gpu, Renderer};
 use crate::material::Material;
+use crate::picture::Color;
 
-use crate::render::{MULTISAMPLE_4X_PATTERN, render_frame_async};
+use crate::render::{MULTISAMPLE_8X_PATTERN, random, random_in, render_frame_async};
 
 mod gpu;
 mod ray;
@@ -59,6 +61,67 @@ struct State {
     controls: Controls,
 }
 
+fn random_scene() -> Object {
+    let spheres = (-11..11).flat_map(|a| (-11..11).map(move |b| {
+        point![a as f32 + 0.9 * random(), 0.2, b as f32 + 0.9 * random()]
+    }))
+        .filter(|center| (center - point![4.0, 0.2, 0.0]).magnitude() > 0.9)
+        .map(|center| {
+            let material = random();
+            let material = if material < 0.8 {
+                // diffuse
+                let color = Color::new(
+                    random() * random(),
+                    random() * random(),
+                    random() * random(),
+                    1.0,
+                );
+                Material::lambert(color)
+            } else if material < 0.95 {
+                // metal
+                let albedo = Color::new(
+                    random_in(0.5..1.0),
+                    random_in(0.5..1.0),
+                    random_in(0.5..1.0),
+                    1.0,
+                );
+                let fuzz = random_in(0.0..0.5);
+                Material::metal(albedo, fuzz)
+            } else {
+                // glass
+                Material::dielectric(1.5)
+            };
+            Object::sphere(center, 0.2, material)
+        });
+    let ground = Object::sphere(
+        point![0.0, -1000.0, 0.0],
+        1000.0,
+        Material::lambert(Color::new(0.5, 0.5, 0.5, 1.0)),
+    );
+    Object::List(
+        once(ground)
+            .chain(spheres)
+            .chain([
+                Object::sphere(
+                    point![0.0, 1.0, 0.0],
+                    1.0,
+                    Material::dielectric(1.5),
+                ),
+                Object::sphere(
+                    point![-4.0, 1.0, 0.0],
+                    1.0,
+                    Material::lambert(Color::new(0.4, 0.2, 0.1, 1.0)),
+                ),
+                Object::sphere(
+                    point![4.0, 1.0, 0.0],
+                    1.0,
+                    Material::metal(Color::new(0.7, 0.6, 0.5, 1.0), 0.0),
+                ),
+            ])
+            .collect()
+    )
+}
+
 fn spawn_worker(frame: &Arc<Mutex<Frame<RGBA8>>>, state: Arc<Mutex<State>>) -> JoinHandle<()> {
     let frame = Arc::downgrade(frame);
     let mut last_camera = Camera::new(
@@ -79,7 +142,7 @@ fn spawn_worker(frame: &Arc<Mutex<Frame<RGBA8>>>, state: Arc<Mutex<State>>) -> J
 
                 info!(target: "app", "Starting frame render...");
                 let start = Instant::now();
-                render_frame_async(frame.as_ref(), &state.camera, &state.world, &MULTISAMPLE_4X_PATTERN);
+                render_frame_async(frame.as_ref(), &state.camera, &state.world, &MULTISAMPLE_8X_PATTERN);
                 let elapsed = start.elapsed();
                 info!(target: "app", "Finished rendering. Took {:?}", elapsed);
             }
@@ -109,38 +172,17 @@ fn main() {
         Renderer::new(gpu, surface, (size.width, size.height))
     });
 
-    let look_at = point![0.0, 0.0, -1.0];
-    let position = point![3.0, 3.0, 2.0];
+    let look_at = point![0.0, 0.0, 0.0];
+    let position = point![13.0, 2.0, 3.0];
     let state = Arc::new(Mutex::new(State {
         camera: Camera::new(
             position,
             CameraDirection::LookAt { look_at, up: Vector3::y_axis() },
             20.0,
             0.1,
-            (position - look_at).magnitude(),
+            10.0,
         ),
-        world: Object::List(vec![
-            Object::Sphere(Sphere::new(
-                point![0.0, 0.0, -1.0],
-                0.5,
-                Material::lambert(RGBA8::new_hex(0x996D51FF).into()),
-            )),
-            Object::Sphere(Sphere::new(
-                point![-1.0, 0.0, -1.0],
-                0.5,
-                Material::metal(RGBA8::new_hex(0xC5B673FF).into(), 0.05),
-            )),
-            Object::Sphere(Sphere::new(
-                point![1.0, 0.0, -1.0],
-                0.5,
-                Material::dielectric(1.5),
-            )),
-            Object::Sphere(Sphere::new(
-                point![0.0, -100.5, -1.0],
-                100.0,
-                Material::lambert(RGBA8::new_hex(0xBDC94DFF).into()),
-            )),
-        ]),
+        world: random_scene(),
         controls: Default::default(),
     }));
 
@@ -165,7 +207,7 @@ fn main() {
                     state.camera.position += movement;
 
                     // update focus
-                    if let CameraDirection::LookAt {look_at, up} = &state.camera.direction {
+                    if let CameraDirection::LookAt { look_at, up } = &state.camera.direction {
                         state.camera.focus_distance = (state.camera.position - look_at).magnitude();
                     }
                 }
